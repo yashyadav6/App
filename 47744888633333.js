@@ -237,7 +237,7 @@ window.closeCourse = function() {
 }
 
 // ==========================================
-// 3. LIVE FEED (GET METHOD FIXED)
+// 3. LIVE FEED (GLOBAL API FILTER ENGINE)
 // ==========================================
 async function fetchLiveFeed(courseId) {
     const liveContainer = document.getElementById('live-list-container');
@@ -245,20 +245,22 @@ async function fetchLiveFeed(courseId) {
     if(!liveSection) return;
 
     liveSection.style.display = 'block';
-    liveContainer.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin text-muted"></i> Intercepting Live Matrix...</div>';
+    liveContainer.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin text-muted"></i> Intercepting Global Live Matrix...</div>';
 
     try {
-        // 🚨 THE FIX: Nexttoppers ne POST ko GET mein badal diya hai!
-        // Ab hum ID ko URL ke aage '?course_id=' lagakar bhejenge.
-        const liveUrl = `${API.LIVE}?course_id=${courseId}`;
-        const liveData = await engineFetch(liveUrl, 'GET');
+        // 🚨 NO COURSE_ID IN URL: Hum seedha Global Live API hit kar rahe hain (GET method se)
+        const liveData = await engineFetch(API.LIVE, 'GET');
         
-        let courseLives = [];
-        if (Array.isArray(liveData?.data)) courseLives = liveData.data;
-        else if (Array.isArray(liveData?.data?.list)) courseLives = liveData.data.list;
+        let allLives = [];
+        if (Array.isArray(liveData?.data)) allLives = liveData.data;
+        else if (Array.isArray(liveData?.data?.list)) allLives = liveData.data.list;
 
-        // Ensure we only show classes for this specific batch
-        courseLives = courseLives.filter(i => i.course_id == courseId || !i.course_id);
+        // 🚨 PRO FILTERING: Saari classes mein se sirf apne batch ki class nikalenge
+        let courseLives = allLives.filter(i => 
+            String(i.course_id) === String(courseId) || 
+            String(i.entity_id) === String(courseId) ||
+            String(i.parent_course_id) === String(courseId)
+        );
 
         if (courseLives.length === 0) { 
             liveContainer.innerHTML = `
@@ -282,9 +284,9 @@ async function fetchLiveFeed(courseId) {
             let liveStatus = parseInt(d.live_status || 0);
 
             let tagHtml = ''; let btnHtml = '';
-            let routeToLivePHP = false; // By default goes to VOD Player
+            let routeToLivePHP = false; 
 
-            // SAME SMART LOGIC: Sends Scheduled/Live to live.php (Waiting Room)
+            // SMART LOGIC: Sends Scheduled/Live to live.php (Waiting Room)
             if (liveStatus === 1 || (now >= liveFrom && liveStatus !== 2 && liveFrom > 0)) {
                 tagHtml = '<span class="tag-live" style="background:#ef4444; padding:2px 6px; border-radius:4px; font-size:10px; color:#fff; font-weight:bold; margin-left:5px; animation: pulse 1s infinite;">🔥 LIVE NOW</span>';
                 btnHtml = `<button class="play-btn" style="background:#10b981; color:#fff;" onclick="executeMediaAction('${d.id}', '${safeTitle}', true)"><i class="fas fa-satellite-dish"></i> Join Live</button>`;
@@ -317,7 +319,7 @@ async function fetchLiveFeed(courseId) {
         liveContainer.innerHTML = '<p class="text-danger text-center">Live feed disconnected.</p>';
     }
 }
-                
+
 
 // ==========================================
 // 4. VOD CONTENT FOLDERS (SMART LIVE DETECTION INJECTED)
