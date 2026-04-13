@@ -237,14 +237,103 @@ window.closeCourse = function() {
 }
 
 // ==========================================
-// 3. LIVE FEED (API DEAD - BYPASSED)
+// 3. LIVE FEED (VAULT SCANNER ENGINE)
 // ==========================================
 async function fetchLiveFeed(courseId) {
+    const liveContainer = document.getElementById('live-list-container');
     const liveSection = document.getElementById('live-section');
-    
-    // API dead hone ki wajah se top banner hide kar rahe hain
-    if(liveSection) {
-        liveSection.style.display = 'none';
+    if(!liveSection) return;
+
+    // Section wapas show karo
+    liveSection.style.display = 'block';
+    liveContainer.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin text-muted"></i> Scanning Vault for Live Feeds...</div>';
+
+    try {
+        // DEAD LIVE API KO CHHOD DO, SEEDHA ROOT FOLDER SCAN KARO
+        const folderData = await engineFetch(API.CONTENT, 'POST', { 
+            course_id: String(courseId), 
+            folder_id: "0", 
+            limit: "5000", 
+            page: "1", 
+            parent_course_id: "0" 
+        });
+        
+        let folderItems = [];
+        if (Array.isArray(folderData?.data)) folderItems = folderData.data;
+        else if (Array.isArray(folderData?.data?.list)) folderItems = folderData.data.list;
+
+        let liveClasses = [];
+        
+        // Folder ke andar chhupi hui live/scheduled classes dhoondho
+        folderItems.forEach(item => {
+            const d = item.data || {};
+            const id = d.id || item.entity_id || item.id;
+            
+            if (d.is_live == 1 || d.live_status == 0 || d.live_status == 1 || item.type === 'live') {
+                liveClasses.push({
+                    id: id,
+                    title: item.title,
+                    thumbnail: d.thumbnail || item.thumbnail || FALLBACK_IMG,
+                    live_from: d.live_from || 0,
+                    live_to: d.live_to || 0,
+                    live_status: d.live_status || 0
+                });
+            }
+        });
+
+        // Agar koi live class nahi mili toh khali dabba dikhao
+        if (liveClasses.length === 0) { 
+            liveContainer.innerHTML = `
+                <div class="text-center py-4" style="background: var(--bg-color); border-radius: 12px; border: 1px dashed var(--border-color);">
+                    <i class="fas fa-satellite-dish fa-2x text-muted mb-2"></i>
+                    <p style="color: var(--text-muted); font-weight: 600; margin: 0;">There are no live classes scheduled right now.</p>
+                </div>`;
+            return; 
+        }
+
+        let html = '';
+        let now = Date.now();
+
+        // Classes ko Top Section mein render karo
+        liveClasses.forEach(d => {
+            const safeTitle = encodeURIComponent(d.title);
+            let liveFrom = parseInt(d.live_from) * 1000; 
+            let liveTo = parseInt(d.live_to) * 1000;
+            let diff = liveFrom - now;
+            let liveStatus = parseInt(d.live_status);
+
+            let tagHtml = ''; let btnHtml = '';
+
+            if (liveStatus === 1 || (now >= liveFrom && liveStatus !== 2 && liveFrom > 0)) {
+                tagHtml = '<span class="tag-live" style="background:#ef4444; padding:2px 6px; border-radius:4px; font-size:10px; color:#fff; font-weight:bold; margin-left:5px; animation: pulse 1s infinite;">🔥 LIVE NOW</span>';
+                btnHtml = `<button class="play-btn" style="background:#10b981; color:#fff;" onclick="executeMediaAction('${d.id}', '${safeTitle}', true)"><i class="fas fa-satellite-dish"></i> Join Live</button>`;
+            } else if (liveStatus === 0 || diff > 0) {
+                let h = Math.floor(diff / 3600000);
+                let m = Math.floor((diff % 3600000) / 60000);
+                let tStr = (h > 0 ? h + 'h ' : '') + m + 'm';
+                tagHtml = `<span class="tag-scheduled" style="background:#f59e0b; padding:2px 6px; border-radius:4px; font-size:10px; color:#000; font-weight:bold; margin-left:5px;">🕒 STARTS IN ${tStr.toUpperCase()}</span>`;
+                btnHtml = `<button class="btn-outline" style="color:#f59e0b; border-color:#f59e0b;" onclick="executeMediaAction('${d.id}', '${safeTitle}', true)"><i class="fas fa-clock"></i> Waiting Room</button>`;
+            } else {
+                tagHtml = '<span class="tag-completed" style="background:#64748b; padding:2px 6px; border-radius:4px; font-size:10px; color:#fff; font-weight:bold; margin-left:5px;">RECORDED</span>';
+                btnHtml = `<button class="play-btn" style="background:var(--primary); color:#fff;" onclick="executeMediaAction('${d.id}', '${safeTitle}', false)"><i class="fas fa-play"></i> Watch</button>`;
+            }
+
+            html += `
+            <div class="folder-item animate-slide-up">
+                <div class="thumb-container">
+                    <img src="${d.thumbnail}" class="content-thumb" onerror="this.src='${FALLBACK_IMG}'">
+                    <div>
+                        <h4 style="color: var(--text-main); margin:0;">${d.title} ${tagHtml}</h4>
+                        <small style="color: var(--text-muted);"><i class="far fa-calendar"></i> ${new Date(liveFrom).toLocaleString()}</small>
+                    </div>
+                </div>
+                ${btnHtml}
+            </div>`;
+        });
+        liveContainer.innerHTML = html;
+
+    } catch(e) {
+        liveContainer.innerHTML = '<p class="text-danger text-center">Failed to scan the vault.</p>';
     }
 }
 
