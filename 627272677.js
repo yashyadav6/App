@@ -466,14 +466,21 @@ window.executeMediaAction = async function(contentId, parentId, title, forceLive
     }
 
     try {
-        const mediaData = await fetchTrueMediaDetails(currentCourseId, parentId, contentId);
+        let data = await engineFetch(`${API.MEDIA}?content_id=${contentId}&course_id=${currentCourseId}&parent_id=${parentId}`, 'GET');
+        
+        if (!data || !data.data) {
+            data = await engineFetch(API.MEDIA, 'POST', { content_id: contentId, course_id: currentCourseId, parent_id: parentId });
+        }
+        
         if(btn) btn.innerHTML = orgHtml;
 
-        if (!mediaData) {
+        if (!data || !data.data) {
             alert("Security Block: Media Payload Missing. API blocked the request."); return;
         }
 
+        const mediaData = data.data;
         let mediaUrl = mediaData.file_url || "";
+        
         if (!mediaUrl && mediaData.download_urls) { 
             try { 
                 const urls = JSON.parse(mediaData.download_urls); 
@@ -483,32 +490,27 @@ window.executeMediaAction = async function(contentId, parentId, title, forceLive
 
         let videoType = parseInt(mediaData.video_type || 0);
 
-        // 🚀 ROUTE 1: LIVE SECURE MATRIX
+        // 🚀 ROUTE 1: DIRECT LIVE MATRIX (NO DOUBLE FETCHING)
         if (forceLiveRoute || videoType === 3) {
             let liveFrom = mediaData.live_from || 0;
+            // Chat node nikal lo
             let chatNode = mediaData.mqtt_live_cred ? (mediaData.mqtt_live_cred.public_chat_node || "") : "";
             
             const safeTitle = encodeURIComponent(title);
-            const safeStream = encodeURIComponent(mediaUrl);
-            let matrixUrl = `live.php?batchId=${currentCourseId}&videoId=${contentId}&title=${safeTitle}&node=${chatNode}&startTime=${liveFrom}&stream=${safeStream}`;
+            const safeStream = encodeURIComponent(mediaUrl); // Seedha m3u8 link
+            
+            // Seedha link aur node pass kar rahe hain live.php ko
+            let matrixUrl = `live.php?title=${safeTitle}&node=${chatNode}&stream=${safeStream}`;
             window.open(matrixUrl, '_blank');
             return;
         }
 
-        // 🎬 ROUTE 2: NORMAL VOD (RECORDED) & PDF
+        // 🎬 ROUTE 2: NORMAL VOD (RECORDED)
         let fileType = mediaData.file_type; 
-        
         if (mediaUrl) {
             if (mediaUrl.toLowerCase().endsWith('.pdf') || fileType == 3 || fileType == 1) {
                 window.open(mediaUrl, '_blank');
-            } 
-            else if (videoType == 1 || mediaUrl.includes('youtube.com') || mediaUrl.includes('youtu.be')) {
-                let ytId = mediaUrl;
-                if(mediaUrl.includes('v=')) ytId = mediaUrl.split('v=')[1].substring(0, 11);
-                else if(mediaUrl.includes('youtu.be/')) ytId = mediaUrl.split('youtu.be/')[1].substring(0, 11);
-                window.open(`https://www.youtube.com/watch?v=${ytId}`, '_blank');
-            } 
-            else {
+            } else {
                 window.open(`player.php?url=${encodeURIComponent(mediaUrl)}&title=${title}`, '_blank');
             }
         } else {
