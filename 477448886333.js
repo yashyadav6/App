@@ -233,7 +233,7 @@ window.closeCourse = function() {
 }
 
 // ==========================================
-// 3. LIVE FEED (GLOBAL API FILTER ENGINE)
+// 3. LIVE FEED (DEEP FOLDER SCANNER ENGINE)
 // ==========================================
 async function fetchLiveFeed(courseId) {
     const liveContainer = document.getElementById('live-list-container');
@@ -241,26 +241,67 @@ async function fetchLiveFeed(courseId) {
     if(!liveSection) return;
 
     liveSection.style.display = 'block';
-    liveContainer.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin text-muted"></i> Intercepting Global Live Matrix...</div>';
+    liveContainer.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin text-muted"></i> Deep Scanning Subject Folders...</div>';
 
     try {
-        const liveData = await engineFetch(API.LIVE, 'GET');
+        // STEP 1: Pehle bahar wale (Root) Folders nikalo
+        const rootData = await engineFetch(API.CONTENT, 'POST', { 
+            course_id: String(courseId), folder_id: "0", limit: "100", page: "1", parent_course_id: "0" 
+        });
         
-        let allLives = [];
-        if (Array.isArray(liveData?.data)) allLives = liveData.data;
-        else if (Array.isArray(liveData?.data?.list)) allLives = liveData.data.list;
+        let rootItems = [];
+        if (Array.isArray(rootData?.data)) rootItems = rootData.data;
+        else if (Array.isArray(rootData?.data?.list)) rootItems = rootData.data.list;
 
-        let courseLives = allLives.filter(i => 
-            String(i.course_id) === String(courseId) || 
-            String(i.entity_id) === String(courseId) ||
-            String(i.parent_course_id) === String(courseId)
-        );
+        let allLiveClasses = [];
+        let subFolders = [];
 
-        if (courseLives.length === 0) { 
+        // Check karo ki kya root par hi koi class hai ya sirf folders hain
+        rootItems.forEach(item => {
+            const d = item.data || {};
+            if (d.is_live == 1 || d.live_status == 0 || d.live_status == 1 || item.type === 'live') {
+                allLiveClasses.push(item);
+            } else if (item.type === 'folder' || item.type === 'subject') {
+                subFolders.push(item);
+            }
+        });
+
+        // STEP 2: Agar sub-folders hain, toh sabke andar ek sath (Parallel) scan maaro!
+        if (subFolders.length > 0) {
+            const folderPromises = subFolders.map(folder => {
+                const fId = folder.id || folder.entity_id || folder.data?.id;
+                return engineFetch(API.CONTENT, 'POST', { 
+                    course_id: String(courseId), folder_id: String(fId), limit: "100", page: "1", parent_course_id: "0" 
+                });
+            });
+
+            // Ek hi second mein saare folders ka data aa jayega (Super Fast)
+            const foldersResults = await Promise.all(folderPromises);
+
+            foldersResults.forEach(res => {
+                let items = [];
+                if (Array.isArray(res?.data)) items = res.data;
+                else if (Array.isArray(res?.data?.list)) items = res.data.list;
+
+                items.forEach(item => {
+                    const d = item.data || {};
+                    // Sirf wahi classes uthao jo "Scheduled (0)" ya "Live (1)" hain. 
+                    // Recorded (2) classes ko top banner mein nahi dikhayenge taaki kachra na jama ho.
+                    if (d.is_live == 1 || d.live_status == 0 || d.live_status == 1 || item.type === 'live') {
+                        if (d.live_status !== 2) { 
+                            allLiveClasses.push(item);
+                        }
+                    }
+                });
+            });
+        }
+
+        // STEP 3: Render Result
+        if (allLiveClasses.length === 0) { 
             liveContainer.innerHTML = `
                 <div class="text-center py-4" style="background: var(--bg-color); border-radius: 12px; border: 1px dashed var(--border-color);">
                     <i class="fas fa-satellite-dish fa-2x text-muted mb-2"></i>
-                    <p style="color: var(--text-muted); font-weight: 600; margin: 0;">There are no live classes scheduled for this batch right now.</p>
+                    <p style="color: var(--text-muted); font-weight: 600; margin: 0;">No upcoming live classes found in any folder.</p>
                 </div>`;
             return; 
         }
@@ -268,9 +309,12 @@ async function fetchLiveFeed(courseId) {
         let html = '';
         let now = Date.now();
 
-        courseLives.forEach(d => {
-            const safeTitle = encodeURIComponent(d.title || "Live Class");
-            const thumb = d.thumbnail || FALLBACK_IMG;
+        allLiveClasses.forEach(item => {
+            const d = item.data || {};
+            const id = d.id || item.entity_id || item.id;
+            const title = item.title || "Live Class";
+            const safeTitle = encodeURIComponent(title);
+            const thumb = d.thumbnail || item.thumbnail || FALLBACK_IMG;
             
             let liveFrom = parseInt(d.live_from || 0) * 1000; 
             let liveTo = parseInt(d.live_to || 0) * 1000;
@@ -281,16 +325,13 @@ async function fetchLiveFeed(courseId) {
 
             if (liveStatus === 1 || (now >= liveFrom && liveStatus !== 2 && liveFrom > 0)) {
                 tagHtml = '<span class="tag-live" style="background:#ef4444; padding:2px 6px; border-radius:4px; font-size:10px; color:#fff; font-weight:bold; margin-left:5px; animation: pulse 1s infinite;">🔥 LIVE NOW</span>';
-                btnHtml = `<button class="play-btn" style="background:#10b981; color:#fff;" onclick="executeMediaAction('${d.id}', '${safeTitle}', true)"><i class="fas fa-satellite-dish"></i> Join Live</button>`;
-            } else if (liveStatus === 0 || diff > 0) {
+                btnHtml = `<button class="play-btn" style="background:#10b981; color:#fff;" onclick="executeMediaAction('${id}', '${safeTitle}', true)"><i class="fas fa-satellite-dish"></i> Join Live</button>`;
+            } else {
                 let h = Math.floor(diff / 3600000);
                 let m = Math.floor((diff % 3600000) / 60000);
                 let tStr = (h > 0 ? h + 'h ' : '') + m + 'm';
                 tagHtml = `<span class="tag-scheduled" style="background:#f59e0b; padding:2px 6px; border-radius:4px; font-size:10px; color:#000; font-weight:bold; margin-left:5px;">🕒 STARTS IN ${tStr.toUpperCase()}</span>`;
-                btnHtml = `<button class="btn-outline" style="color:#f59e0b; border-color:#f59e0b;" onclick="executeMediaAction('${d.id}', '${safeTitle}', true)"><i class="fas fa-clock"></i> Waiting Room</button>`;
-            } else {
-                tagHtml = '<span class="tag-completed" style="background:#64748b; padding:2px 6px; border-radius:4px; font-size:10px; color:#fff; font-weight:bold; margin-left:5px;">RECORDED</span>';
-                btnHtml = `<button class="play-btn" style="background:var(--primary); color:#fff;" onclick="executeMediaAction('${d.id}', '${safeTitle}', false)"><i class="fas fa-play"></i> Watch</button>`;
+                btnHtml = `<button class="btn-outline" style="color:#f59e0b; border-color:#f59e0b;" onclick="executeMediaAction('${id}', '${safeTitle}', true)"><i class="fas fa-clock"></i> Waiting Room</button>`;
             }
 
             html += `
@@ -298,19 +339,22 @@ async function fetchLiveFeed(courseId) {
                 <div class="thumb-container">
                     <img src="${thumb}" class="content-thumb" onerror="this.src='${FALLBACK_IMG}'">
                     <div>
-                        <h4 style="color: var(--text-main); margin:0;">${d.title} ${tagHtml}</h4>
+                        <h4 style="color: var(--text-main); margin:0;">${title} ${tagHtml}</h4>
                         <small style="color: var(--text-muted);"><i class="far fa-calendar"></i> ${new Date(liveFrom).toLocaleString()}</small>
                     </div>
                 </div>
                 ${btnHtml}
             </div>`;
         });
+        
         liveContainer.innerHTML = html;
 
     } catch(e) {
-        liveContainer.innerHTML = '<p class="text-danger text-center">Live feed disconnected.</p>';
+        liveContainer.innerHTML = '<p class="text-danger text-center">Failed to deeply scan folders.</p>';
+        console.error("Deep Scan Error:", e);
     }
 }
+
 
 // ==========================================
 // 4. VOD CONTENT FOLDERS (SMART LIVE DETECTION INJECTED)
