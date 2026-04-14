@@ -1,6 +1,6 @@
 // ==========================================================
 // STUDYPARCHAM PREMIUM VERCEL ENGINE (GOD MODE)
-// Asli Media API Fetcher + Exact Time Lock & Converter
+// 🚨 MILITARY GRADE AUTHENTICATION INJECTOR ADDED
 // ==========================================================
 
 const SP_PROXY = 'https://sp-api-theta.vercel.app/api/v1/proxy'; 
@@ -13,12 +13,21 @@ const API = {
     MEDIA: 'https://course.nexttoppers.com/course/content-details'
 };
 
+// 🚨 THE MASTER KEYS (From your cURL)
+const NT_HEADERS = {
+    'accept': 'application/json, text/plain, */*',
+    'app_id': '1770981347',
+    'authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyNjU4NDc0LCJhcHBfaWQiOiIxNzcwOTgxMzQ3IiwiZGV2aWNlX2lkIjoiODUwZGMzZDktOWJjOC00NGRiLWEwNDEtYTQzZGQzOTY4OTYyIiwicGxhdGZvcm0iOiIzIiwiaWF0IjoxNzc2MTc0Mzc0LCJleHAiOjE3Nzg3NjYzNzR9.lONjJkzV-FVJMHC1tVxPL1t7uRgSxp5LpIlvoRHqn5U',
+    'platform': '3',
+    'version': '1'
+};
+
 let currentCourseId = null;
 let folderHistory = [];
 window.masterBatches = [];
 
 // ==========================================
-// 🎯 CUSTOM BATCH LIST GENERATOR
+// 🎯 CUSTOM BATCH LIST
 // ==========================================
 let MASTER_ID_LIST = [];
 for(let i = 179; i >= 175; i--) MASTER_ID_LIST.push(i);
@@ -31,14 +40,19 @@ const SCAN_CHUNK_SIZE = 15;
 let isScanning = false;
 
 // ==========================================
-// UNIVERSAL SECURE FETCH FUNCTION
+// 🛡️ UNIVERSAL SECURE FETCH FUNCTION (WITH HEADERS)
 // ==========================================
 async function engineFetch(targetUrl, method, payload = null) {
     try {
         const response = await fetch(SP_PROXY, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ target_url: targetUrl, method: method, payload: payload })
+            body: JSON.stringify({ 
+                target_url: targetUrl, 
+                method: method, 
+                payload: payload,
+                headers: NT_HEADERS // 🚨 VIP PASS INJECTED HERE
+            })
         });
         return await response.json();
     } catch (e) {
@@ -46,6 +60,7 @@ async function engineFetch(targetUrl, method, payload = null) {
         return null;
     }
 }
+
 
 // ==========================================
 // ASLI DATA FETCHER (FROM MEDIA API)
