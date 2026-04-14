@@ -3,7 +3,7 @@
 // 🚨 MILITARY GRADE AUTHENTICATION INJECTOR ADDED
 // ==========================================================
 
-const SP_PROXY = 'https://sp-api-theta.vercel.app/api/v1/proxy'; 
+const SP_PROXY = 'https://nt.studyparcham.qzz.io/nt_proxy.php'; 
 const FALLBACK_IMG = "https://i.ibb.co/dJbZq97B/2671188-1-logo.jpg";
 
 const API = {
