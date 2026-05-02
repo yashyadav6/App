@@ -495,13 +495,13 @@ window.executeMediaAction = async function(contentId, parentId, title, forceLive
         let data = await engineFetch(`${API.MEDIA}?content_id=${contentId}&course_id=${currentCourseId}&parent_id=${parentId}`, 'GET');
         
         if (!data || !data.data) {
-            data = await engineFetch(API.MEDIA, 'POST', { content_id: contentId, course_id: currentCourseId, parent_id: parentId });
+            data = await engineFetch(API.MEDIA, 'GET', { content_id: contentId, course_id: currentCourseId, parent_id: parentId });
         }
         
         if(btn) btn.innerHTML = orgHtml;
 
         if (!data || !data.data) {
-            alert("Security Block: Media Payload Missing. API blocked the request."); return;
+            alert("Security Block: Media Payload Missing. API blockkkkked the request."); return;
         }
 
         const mediaData = data.data;
