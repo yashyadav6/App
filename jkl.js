@@ -46,26 +46,37 @@ const SCAN_CHUNK_SIZE = 15;
 let isScanning = false;
 
 // ==========================================
-// 🛡️ OMNI-FETCHER WITH HTML CLEANER
+// 🛡️ OMNI-FETCHER (THE DOUBLE-TAP AUTH INJECTOR)
 // ==========================================
 async function engineFetch(targetUrl, preferredMethod, payload = null) {
     async function hitProxy(methodToTry) {
         try {
+            // 🚨 MASTER FIX: Injecting VIP Auth directly into real HTTP Headers!
+            // This forces blind proxies like Vercel to forward the token natively.
+            const realHttpHeaders = {
+                'Content-Type': 'application/json',
+                'app_id': NT_HEADERS.app_id,
+                'authorization': NT_HEADERS.authorization,
+                'user_id': NT_HEADERS.user_id,
+                'platform': NT_HEADERS.platform,
+                'version': NT_HEADERS.version
+            };
+
             const response = await fetch(SP_PROXY, {
-                method: 'POST', // Always POST to Vercel Proxy
-                headers: { 'Content-Type': 'application/json' },
+                method: 'POST', // Always POST to proxy to carry the instructions
+                headers: realHttpHeaders, // Real HTTP headers
                 body: JSON.stringify({ 
                     target_url: targetUrl, 
                     method: methodToTry, 
                     payload: payload,
-                    headers: NT_HEADERS 
+                    headers: NT_HEADERS // Fallback in body
                 })
             });
             
             const text = await response.text();
             
+            // Safe JSON Extraction (Bypasses Vercel/Host HTML garbage)
             try {
-                // Extract pure JSON, ignoring any server HTML garbage
                 const jsonStart = text.indexOf('{');
                 const jsonEnd = text.lastIndexOf('}');
                 if (jsonStart !== -1 && jsonEnd !== -1) {
@@ -82,10 +93,11 @@ async function engineFetch(targetUrl, preferredMethod, payload = null) {
     let res = await hitProxy(preferredMethod);
     if (res && res.success) return res;
 
-    // Phase 2: If failed, Auto-switch Method (Shape-Shifter)
+    // Phase 2: If blocked, Shape-Shift to opposite method!
     let fallbackMethod = preferredMethod === 'POST' ? 'GET' : 'POST';
     return await hitProxy(fallbackMethod);
 }
+
 
 // ==========================================
 // 1. LOAD BATCHES
@@ -468,8 +480,10 @@ window.fetchFolderContent = async function(folderId) {
     });
 }
 
+            
+            
 // ==========================================
-// 5. THE MASTER MEDIA FETCHER (SAFE URLS)
+// 5. THE MASTER MEDIA FETCHER
 // ==========================================
 window.executeMediaAction = async function(contentId, parentId, title, forceLiveRoute, btnElement) {
     const orgHtml = btnElement ? btnElement.innerHTML : "";
@@ -484,15 +498,18 @@ window.executeMediaAction = async function(contentId, parentId, title, forceLive
     try {
         let mediaData = null;
         
-        // Construct safe explicit GET URLs
+        // Build explicit GET URLs to prevent proxy from dropping payload parameters
         const urlWithParent = `${API.MEDIA}?content_id=${contentId}&course_id=${currentCourseId}&parent_id=${parentId}`;
         const urlWithoutParent = `${API.MEDIA}?content_id=${contentId}&course_id=${currentCourseId}`;
 
-        // 4-WAY BRUTE FORCE
+        // 🚨 6-WAY BRUTE FORCE: Leaves no stone unturned!
         const attempts = [
             { url: urlWithoutParent, method: 'GET', payload: null }, 
             { url: urlWithParent, method: 'GET', payload: null }, 
-            { url: API.MEDIA, method: 'POST', payload: { content_id: contentId, course_id: currentCourseId, parent_id: parentId } }
+            { url: API.MEDIA, method: 'POST', payload: { content_id: contentId, course_id: currentCourseId } },
+            { url: API.MEDIA, method: 'POST', payload: { content_id: contentId, course_id: currentCourseId, parent_id: parentId } },
+            { url: API.MEDIA, method: 'GET', payload: { content_id: contentId, course_id: currentCourseId } },
+            { url: API.MEDIA, method: 'GET', payload: { content_id: contentId, course_id: currentCourseId, parent_id: parentId } }
         ];
 
         for (let att of attempts) {
@@ -503,6 +520,7 @@ window.executeMediaAction = async function(contentId, parentId, title, forceLive
             }
         }
         
+        // Restore Button beautifully
         if(btnElement) {
             btnElement.innerHTML = orgHtml;
             btnElement.style.opacity = '1';
@@ -525,6 +543,7 @@ window.executeMediaAction = async function(contentId, parentId, title, forceLive
 
         let videoType = parseInt(mediaData.video_type || 0);
 
+        // 🚀 LIVE ROUTE
         if (forceLiveRoute || videoType === 3) {
             let chatNode = mediaData.mqtt_live_cred ? (mediaData.mqtt_live_cred.public_chat_node || "") : "";
             const safeTitle = encodeURIComponent(title);
@@ -535,6 +554,7 @@ window.executeMediaAction = async function(contentId, parentId, title, forceLive
             return;
         }
 
+        // 🎬 VOD ROUTE (PDF, YouTube, M3U8)
         let fileType = parseInt(mediaData.file_type || 0);
         if (mediaUrl) {
             if (mediaUrl.toLowerCase().endsWith('.pdf') || fileType === 3 || fileType === 1) {
@@ -557,6 +577,6 @@ window.executeMediaAction = async function(contentId, parentId, title, forceLive
             btnElement.disabled = false;
             btnElement.style.pointerEvents = 'auto';
         }
-        alert("Engine connection failed.");
+        alert("Engine connection failed. Proxy might be down.");
     }
 }
