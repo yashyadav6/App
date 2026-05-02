@@ -481,39 +481,32 @@ window.fetchFolderContent = async function(folderId) {
 }
 
 // ==========================================
-// 5. THE EXACT MEDIA FETCHER (STRICTLY GET URL)
+// 5. MEDIA ROUTING (GOLDMINE PAYLOAD INJECTOR)
 // ==========================================
-window.executeMediaAction = async function(contentId, parentId, title, forceLiveRoute, btnElement) {
-    const orgHtml = btnElement ? btnElement.innerHTML : "";
-
-    if(btnElement) {
-        btnElement.innerHTML = '<i class="fas fa-circle-notch fa-spin me-2"></i>Loading...';
-        btnElement.style.opacity = '0.7';
-        btnElement.disabled = true;
-        btnElement.style.pointerEvents = 'none';
+window.executeMediaAction = async function(contentId, parentId, title, forceLiveRoute) {
+    const btn = document.activeElement;
+    const orgHtml = btn ? btn.innerHTML : "Loading...";
+    
+    if(btn && (btn.classList.contains('play-btn') || btn.classList.contains('btn-outline'))) {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     }
 
     try {
-        // 🚨 EXACT FIX: Only content_id and course_id as GET params. NO parent_id.
-        const exactApiUrl = `${API.MEDIA}?content_id=${contentId}&course_id=${currentCourseId}`;
+        let data = await engineFetch(`${API.MEDIA}?content_id=${contentId}&course_id=${currentCourseId}&parent_id=${parentId}`, 'GET');
         
-        // Using GET as per your log
-        let data = await engineFetch(exactApiUrl, 'GET', null);
-        
-        if(btnElement) {
-            btnElement.innerHTML = orgHtml;
-            btnElement.style.opacity = '1';
-            btnElement.disabled = false;
-            btnElement.style.pointerEvents = 'auto';
+        if (!data || !data.data) {
+            data = await engineFetch(API.MEDIA, 'POST', { content_id: contentId, course_id: currentCourseId, parent_id: parentId });
         }
+        
+        if(btn) btn.innerHTML = orgHtml;
 
         if (!data || !data.data) {
-            alert("Matrix Firewall Blocked Request. Token might be expired."); 
-            return; 
+            alert("Security Block: Media Payload Missing. API blocked the request."); return;
         }
 
         const mediaData = data.data;
         let mediaUrl = mediaData.file_url || "";
+        
         if (!mediaUrl && mediaData.download_urls) { 
             try { 
                 const urls = JSON.parse(mediaData.download_urls); 
@@ -523,38 +516,34 @@ window.executeMediaAction = async function(contentId, parentId, title, forceLive
 
         let videoType = parseInt(mediaData.video_type || 0);
 
+        // 🚀 ROUTE 1: DIRECT LIVE MATRIX (NO DOUBLE FETCHING)
         if (forceLiveRoute || videoType === 3) {
+            let liveFrom = mediaData.live_from || 0;
+            // Chat node nikal lo
             let chatNode = mediaData.mqtt_live_cred ? (mediaData.mqtt_live_cred.public_chat_node || "") : "";
-            const safeTitle = encodeURIComponent(title);
-            const safeStream = encodeURIComponent(mediaUrl);
             
-            let matrixUrl = `live.php?title=${safeTitle}&node=${chatNode}&stream=${safeStream}&videoId=${contentId}`;
+            const safeTitle = encodeURIComponent(title);
+            const safeStream = encodeURIComponent(mediaUrl); // Seedha m3u8 link
+            
+            // Seedha link aur node pass kar rahe hain live.php ko
+            let matrixUrl = `live.php?title=${safeTitle}&node=${chatNode}&stream=${safeStream}`;
             window.open(matrixUrl, '_blank');
             return;
         }
 
-        let fileType = parseInt(mediaData.file_type || 0);
+        // 🎬 ROUTE 2: NORMAL VOD (RECORDED)
+        let fileType = mediaData.file_type; 
         if (mediaUrl) {
-            if (mediaUrl.toLowerCase().endsWith('.pdf') || fileType === 3 || fileType === 1) {
+            if (mediaUrl.toLowerCase().endsWith('.pdf') || fileType == 3 || fileType == 1) {
                 window.open(mediaUrl, '_blank');
-            } 
-            else if (videoType === 1 || mediaUrl.includes('youtube.com') || mediaUrl.includes('youtu.be')) {
-                let ytId = mediaUrl.includes('v=') ? mediaUrl.split('v=')[1].substring(0, 11) : mediaUrl.split('youtu.be/')[1].substring(0, 11);
-                window.open(`https://www.youtube.com/watch?v=${ytId}`, '_blank');
-            } 
-            else {
+            } else {
                 window.open(`player.php?url=${encodeURIComponent(mediaUrl)}&title=${title}`, '_blank');
             }
         } else {
-            alert("Failed to extract media token. Stream encrypted.");
+            alert("Failed to extract media token. Stream might be encrypted.");
         }
     } catch(e) {
-        if(btnElement) {
-            btnElement.innerHTML = orgHtml;
-            btnElement.style.opacity = '1';
-            btnElement.disabled = false;
-            btnElement.style.pointerEvents = 'auto';
-        }
+        if(btn) btn.innerHTML = orgHtml;
         alert("Engine connection failed.");
     }
 }
