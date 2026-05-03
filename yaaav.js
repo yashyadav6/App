@@ -188,7 +188,7 @@ window.handleSearch = function() {
 }
 
 async function loadOldBatches() {
-    const oldBatchIds = [78, 62, 64, 81]; 
+    const oldBatchIds = [78, 62, 64, 81, 151, 150, 152]; 
     const container = document.getElementById('old-batches');
     if (!container) return;
     container.innerHTML = "";
