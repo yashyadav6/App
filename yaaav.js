@@ -12,11 +12,11 @@ const API = {
     MEDIA: 'https://course.nexttoppers.com/course/content-details'
 };
 
-// 🚨 STRICT VIP HEADERS
+/// 🚨 EXACT VIP HEADERS (Updated with Today's Fresh Token)
 const NT_HEADERS = {
     'accept': 'application/json, text/plain, */*',
     'app_id': '1770981347',
-    'authorization': 'Bearer .eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyNjU4NDc0LCJhcHBfaWQiOiIxNzcwOTgxMzQ3IiwiZGV2aWNlX2lkIjoiZWJhNmI5NzYtOGI5OC00MmVjLWE0MDktMTgwNDc0NDM1YzhiIiwicGxhdGZvcm0iOiIzIiwidXNlcl90eXBlIjoxLCJpYXQiOjE3Nzc3OTQ5MjgsImV4cCI6MTc4MDM4NjkyOH0._Eh4JJM4VWsqZJPruRImIrLSCkmMDDq-ECs2BMpbz_g',
+    'authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyNjU4NDc0LCJhcHBfaWQiOiIxNzcwOTgxMzQ3IiwiZGV2aWNlX2lkIjoiZWJhNmI5NzYtOGI5OC00MmVjLWE0MDktMTgwNDc0NDM1YzhiIiwicGxhdGZvcm0iOiIzIiwidXNlcl90eXBlIjoxLCJpYXQiOjE3Nzc3OTQ5MjgsImV4cCI6MTc4MDM4NjkyOH0._Eh4JJM4VWsqZJPruRImIrLSCkmMDDq-ECs2BMpbz_g',
     'content-type': 'application/json',
     'origin': 'https://nexttoppers.com',
     'platform': '3',
