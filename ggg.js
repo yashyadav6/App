@@ -222,8 +222,9 @@ window.closeCourse = function() {
     document.getElementById('main-app').style.display = 'block'; 
 }
 
-// ==========================================
-// 3. LIVE FEED
+
+        // ==========================================
+// 3. LIVE FEED (FAST FOLDER SCANNER)
 // ==========================================
 async function fetchLiveFeed(courseId) {
     const liveContainer = document.getElementById('live-list-container');
@@ -231,7 +232,7 @@ async function fetchLiveFeed(courseId) {
     if(!liveSection) return;
 
     liveSection.style.display = 'block';
-    liveContainer.innerHTML = '<div class="text-center py-4"><i class="fas fa-circle-notch fa-spin fa-2x text-danger mb-2"></i><br><span class="text-muted">Scanning Live Matrix...</span></div>';
+    liveContainer.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin text-muted"></i> Scanning Folders for Live Classes...</div>';
 
     try {
         let allLiveClasses = [];
@@ -243,18 +244,7 @@ async function fetchLiveFeed(courseId) {
 
             try {
                 let p_id = (fId === "0") ? "0" : fId; 
-                // 🚨 EXACT POST PAYLOAD FROM LOG
-                const payload = {
-                    course_id: String(courseId),
-                    folder_id: String(p_id),
-                    is_free: "",
-                    keyword: "",
-                    limit: "1000",
-                    page: "1",
-                    parent_course_id: "0"
-                };
-
-                let data = await engineFetch(API.CONTENT, 'POST', payload);
+                let data = await engineFetch(API.CONTENT, 'POST', { course_id: String(courseId), folder_id: String(p_id), limit: "5000", page: "1", parent_course_id: "0" });
                 
                 let items = [];
                 if (data && data.data) {
@@ -268,14 +258,17 @@ async function fetchLiveFeed(courseId) {
                     const type = (item.type || "").toLowerCase();
                     const d = item.data || {};
                     const id = d.id || item.entity_id || item.id;
+                    
                     let vType = parseInt(item.video_type || d.video_type || 0);
 
                     if (vType === 3) {
+                        item.parent_folder_id = fId; 
                         allLiveClasses.push(item);
                     } else if (type === 'folder' || type === 'subject' || type === 'chapter') {
                         subFolders.push(id);
                     }
                 }
+
                 for (let subId of subFolders) await scanFolderTree(subId, depth + 1);
             } catch (e) {}
         }
@@ -289,7 +282,7 @@ async function fetchLiveFeed(courseId) {
         });
 
         if (allLiveClasses.length === 0) { 
-            liveContainer.innerHTML = `<div class="text-center py-4" style="background: var(--bg-dark); border-radius: 12px; border: 1px dashed #333;"><p style="color: var(--text-muted); font-weight: 600; margin: 0;">No upcoming live classes right now.</p></div>`;
+            liveContainer.innerHTML = `<div class="text-center py-4" style="background: var(--bg-color); border-radius: 12px; border: 1px dashed var(--border-color);"><i class="fas fa-satellite-dish fa-2x text-muted mb-2"></i><p style="color: var(--text-muted); font-weight: 600; margin: 0;">No upcoming live classes right now.</p></div>`;
             return; 
         }
 
@@ -299,11 +292,12 @@ async function fetchLiveFeed(courseId) {
         allLiveClasses.forEach(item => {
             const d = item.data || {};
             const id = d.id || item.entity_id || item.id;
+            const parentId = item.parent_folder_id || "0"; 
             const titleText = item.title || d.title || "Live Class";
             const safeTitle = encodeURIComponent(titleText);
             const thumb = item.thumbnail || d.thumbnail || FALLBACK_IMG;
             
-            let rawTime = item.live_from || d.live_from || item.start_date || item.created_at || 0;
+            let rawTime = item.live_from || d.live_from || 0;
             let liveFrom = parseInt(rawTime, 10);
             if(isNaN(liveFrom)) liveFrom = 0;
             liveFrom = liveFrom * 1000;
@@ -325,24 +319,24 @@ async function fetchLiveFeed(courseId) {
                     let m = Math.floor((diff % 3600000) / 60000);
                     timeStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
                 }
-                tagHtml = `<span style="background:#f59e0b; padding:2px 6px; border-radius:4px; font-size:10px; color:#000; font-weight:bold; margin-left:5px;">🕒 SCHEDULED</span>`;
-                btnHtml = `<button style="${RED_BTN_STYLE} opacity:0.5;" disabled><i class="fas fa-lock"></i> Starts in ${timeStr}</button>`;
+                tagHtml = `<span class="tag-scheduled" style="background:#f59e0b; padding:2px 6px; border-radius:4px; font-size:10px; color:#000; font-weight:bold; margin-left:5px;">🕒 SCHEDULED</span>`;
+                btnHtml = `<button class="btn-outline" disabled style="color:#aaa; border-color:#333; cursor:not-allowed; opacity: 0.6; background:transparent;"><i class="fas fa-lock"></i> Starts in ${timeStr}</button>`;
             } 
             else {
-                tagHtml = '<span style="background:#ef4444; padding:2px 6px; border-radius:4px; font-size:10px; color:#fff; font-weight:bold; margin-left:5px; animation: pulse 1s infinite;">🔥 LIVE NOW</span>';
-                btnHtml = `<button style="${RED_BTN_STYLE}" onmouseover="${RED_BTN_HOVER}" onmouseout="${RED_BTN_OUT}" onclick="executeMediaAction('${id}', '${safeTitle}', true, this)"><i class="fas fa-satellite-dish"></i> Join Live</button>`;
+                tagHtml = '<span class="tag-live" style="background:#ef4444; padding:2px 6px; border-radius:4px; font-size:10px; color:#fff; font-weight:bold; margin-left:5px; animation: pulse 1s infinite;">🔥 LIVE NOW</span>';
+                btnHtml = `<button class="play-btn" style="background:#10b981; color:#fff;" onclick="executeMediaAction('${id}', '${parentId}', '${safeTitle}', true)"><i class="fas fa-satellite-dish"></i> Join Live</button>`;
             }
 
             html += `
-            <div class="folder-item animate-slide-up" style="display:flex; justify-content:space-between; align-items:center; background:var(--glass-bg); padding:15px; border-radius:12px; margin-bottom:12px; border: 1px solid var(--glass-border);">
-                <div class="thumb-container" style="display:flex; align-items:center;">
-                    <img src="${thumb}" style="width:120px; border-radius:8px; margin-right:15px; aspect-ratio:16/9; object-fit:cover;" onerror="this.src='${FALLBACK_IMG}'">
+            <div class="folder-item animate-slide-up">
+                <div class="thumb-container">
+                    <img src="${thumb}" class="content-thumb" onerror="this.src='${FALLBACK_IMG}'">
                     <div>
-                        <h5 style="color: #fff; margin:0; font-size:16px;">${titleText} ${tagHtml}</h5>
-                        <small style="color: #ef4444; font-size: 12px;"><i class="far fa-clock"></i> ${dateString}</small>
+                        <h4 style="color: var(--text-main); margin:0;">${titleText} ${tagHtml}</h4>
+                        <small style="color: #38bdf8; font-weight: bold; font-size: 11px;"><i class="far fa-clock"></i> Scheduled For: ${dateString}</small>
                     </div>
                 </div>
-                <div style="min-width: 140px;">${btnHtml}</div>
+                ${btnHtml}
             </div>`;
         });
         
@@ -351,7 +345,6 @@ async function fetchLiveFeed(courseId) {
         liveContainer.innerHTML = '<p class="text-danger text-center">Failed to fetch live feed.</p>';
     }
 }
-
 // ==========================================
 // 4. VOD CONTENT FOLDERS
 // ==========================================
