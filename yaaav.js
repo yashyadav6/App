@@ -482,7 +482,7 @@ window.executeMediaAction = async function(contentId, title, forceLiveRoute, btn
         }
 
         if (!data || !data.data) {
-            alert("Matrix Firewall Blocked Request. Token might be expired."); 
+            alert("tell the StudyParcham owner to change the token. Token might be expired."); 
             return; 
         }
 
