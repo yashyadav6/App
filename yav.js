@@ -37,7 +37,6 @@ window.masterBatches = [];
 
 let MASTER_ID_LIST = [];
 for(let i = 153; i >= 150; i--) MASTER_ID_LIST.push(i);
-
 for(let i = 179; i >= 175; i--) MASTER_ID_LIST.push(i);
 for(let i = 124; i >= 122; i--) MASTER_ID_LIST.push(i);
 for(let i = 112; i >= 100; i--) MASTER_ID_LIST.push(i);
