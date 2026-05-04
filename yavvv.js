@@ -250,7 +250,7 @@ window.closeCourse = function() {
 }
 
 // ==========================================
-// 3. LIVE FEED (DEEP SCANNING WITH ASLI MEDIA FETCHER)
+// 3. LIVE FEED (STRICT is_live FILTER)
 // ==========================================
 async function fetchLiveFeed(courseId) {
     const liveContainer = document.getElementById('live-list-container');
@@ -258,56 +258,78 @@ async function fetchLiveFeed(courseId) {
     if(!liveSection) return;
 
     liveSection.style.display = 'block';
-    liveContainer.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin text-muted"></i> Intercepting Final Live Data...</div>';
+    liveContainer.innerHTML = '<div class="text-center py-5"><i class="fas fa-circle-notch fa-spin fa-2x text-danger mb-3"></i><br><span style="color:var(--text-muted);">Intercepting Final Live Data...</span></div>';
 
     try {
         let potentialClasses = [];
         let scannedFolders = new Set(); 
+        const now = Date.now();
 
         async function scanFolderTree(fId, depth) {
             if(depth > 5 || scannedFolders.has(fId)) return;
             scannedFolders.add(fId);
 
             try {
-                const data = await engineFetch(API.CONTENT, 'POST', { course_id: String(courseId), folder_id: String(fId), limit: "5000", page: "1", parent_course_id: "0" });
-                let items = [];
-                if (data && data.data) {
-                    if (Array.isArray(data.data)) items = data.data;
-                    else if (Array.isArray(data.data.list)) items = data.data.list;
+                let p_id = (fId === "0") ? "0" : fId; 
+                const payload = { course_id: String(courseId), folder_id: String(p_id), is_free: "", keyword: "", limit: "5000", page: "1", parent_course_id: "0" };
+
+                // Handle MJ/NT dynamic headers if needed, otherwise just payload
+                let data;
+                if(typeof getHeadersForCourse === 'function') {
+                    data = await engineFetch(API.CONTENT, 'POST', payload, getHeadersForCourse(courseId));
+                } else {
+                    data = await engineFetch(API.CONTENT, 'POST', payload);
                 }
+
+                let items = (data && data.data) ? (Array.isArray(data.data) ? data.data : (Array.isArray(data.data.list) ? data.data.list : [])) : [];
 
                 let subFolders = [];
 
-                items.forEach(item => {
+                for (let item of items) {
                     const type = (item.type || "").toLowerCase();
                     const d = item.data || {};
                     const id = d.id || item.entity_id || item.id;
-                    let vType = parseInt(d.video_type || 0);
+                    let vType = parseInt(item.video_type || d.video_type || 0);
+                    
+                    let liveFrom = parseInt(item.live_from || d.live_from || 0) * 1000;
+                    
+                    // ANTI-CLUTTER: Ignore classes older than 24 hours
+                    let timeDiffHours = (now - liveFrom) / (1000 * 60 * 60);
 
-                    // Grab potential lives to fetch true details
-                    if (vType === 3 || type === 'live' || d.is_live == 1) {
+                    // Grab potential lives
+                    if ((vType === 3 || type === 'live' || d.is_live == 1) && timeDiffHours < 24) {
                         item.parent_folder_id = fId; 
                         potentialClasses.push(item);
                     } else if (type === 'folder' || type === 'subject' || type === 'chapter') {
                         subFolders.push(id);
                     }
-                });
+                }
+                
+                // Fetch subfolders in parallel
+                const promises = subFolders.map(subId => scanFolderTree(subId, depth + 1));
+                await Promise.all(promises);
 
-                for (let subId of subFolders) await scanFolderTree(subId, depth + 1);
             } catch (e) {}
         }
 
         await scanFolderTree("0", 1);
 
-        // 🚨 MAGIC: Fetch ASLI Data for potential classes
+        // Fetch TRUE media details
         let confirmedLives = [];
+        
         await Promise.all(potentialClasses.map(async (item) => {
             const id = item.data?.id || item.entity_id || item.id;
-            const parentId = item.parent_folder_id || "0";
+            const exactApiUrl = `${API.MEDIA}?content_id=${id}&course_id=${courseId}`;
             
-            const trueData = await fetchTrueMediaDetails(currentCourseId, parentId, id);
-            if (trueData) {
-                item.true_media = trueData;
+            let trueDataRes;
+            if(typeof getHeadersForCourse === 'function') {
+                trueDataRes = await engineFetch(exactApiUrl, 'GET', null, getHeadersForCourse(courseId));
+            } else {
+                trueDataRes = await engineFetch(exactApiUrl, 'GET', null);
+            }
+            
+            if (trueDataRes && trueDataRes.success && trueDataRes.data) {
+                item.true_media = trueDataRes.data;
                 confirmedLives.push(item);
             }
         }));
@@ -315,64 +337,66 @@ async function fetchLiveFeed(courseId) {
         confirmedLives.sort((a, b) => parseInt(a.true_media.live_from || 0) - parseInt(b.true_media.live_from || 0));
 
         if (confirmedLives.length === 0) { 
-            liveContainer.innerHTML = `<div class="text-center py-4" style="background: var(--bg-color); border-radius: 12px; border: 1px dashed var(--border-color);"><i class="fas fa-satellite-dish fa-2x text-muted mb-2"></i><p style="color: var(--text-muted); font-weight: 600; margin: 0;">No upcoming live classes right now.</p></div>`;
+            liveContainer.innerHTML = `<div class="text-center py-4" style="background: var(--glass-bg, #f8fafc); border-radius: 12px; border: 1px dashed var(--border-color, #cbd5e1);"><p style="color: var(--text-muted, #64748b); font-weight: 600; margin: 0;">No upcoming live classes right now.</p></div>`;
             return; 
         }
 
         let html = '';
-        let now = Date.now();
 
         confirmedLives.forEach(item => {
             const trueMedia = item.true_media;
             const id = trueMedia.id;
-            const parentId = item.parent_folder_id || "0"; 
             const safeTitle = encodeURIComponent(trueMedia.title || item.title || "Live Class");
             const thumb = trueMedia.thumbnail || item.thumbnail || FALLBACK_IMG;
             
             let vType = parseInt(trueMedia.video_type || 0);
-            if (vType !== 3) return; // ONLY TYPE 3
+            if (vType !== 3) return; // Strictly only live types
 
-            let liveFrom = parseInt(trueMedia.live_from || 0) * 1000;
-            let diff = liveFrom - now;
-            let lStatus = parseInt(trueMedia.live_status);
+            // 🚨 STRICT LIVE LOGIC 🚨
+            // Check both item data and true media data for is_live / live_status
+            let isCurrentlyLive = false;
+            if (parseInt(item.is_live) === 1 || parseInt(item.data?.is_live) === 1 || parseInt(trueMedia.live_status) === 1 || parseInt(trueMedia.live_status) === 2) {
+                 isCurrentlyLive = true;
+            }
+
+            let dateString = formatIST(parseInt(trueMedia.live_from || 0));
 
             let tagHtml = ''; let btnHtml = '';
-            let dateString = liveFrom > 0 ? new Date(liveFrom).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }) : "Time not set";
 
-            // 🚨 MASTER LOGIC 🚨
-            if (diff > 0) {
-                // TIME HAS NOT COME -> BLOCK BUTTON
-                let h = Math.floor(diff / 3600000);
-                let m = Math.floor((diff % 3600000) / 60000);
-                let tStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
+            if (isCurrentlyLive) {
+                // IT IS LIVE - SHOW BUTTON
+                tagHtml = '<span style="background:#ef4444; padding:3px 8px; border-radius:4px; font-size:10px; color:#fff; font-weight:bold; margin-left:8px; animation: pulse 1s infinite;">🔥 LIVE NOW</span>';
                 
-                tagHtml = `<span class="tag-scheduled" style="background:#f59e0b; padding:2px 6px; border-radius:4px; font-size:10px; color:#000; font-weight:bold; margin-left:5px;">🕒 SCHEDULED</span>`;
-                btnHtml = `<button class="btn-outline" disabled style="color:#aaa; border-color:#333; cursor:not-allowed; opacity: 0.6; background:transparent;"><i class="fas fa-lock"></i> Starts in ${tStr}</button>`;
+                // Adjust button style based on theme (MJ Amber or NT Blue/Danger)
+                let btnStyle = typeof BTN_DANGER !== 'undefined' ? BTN_DANGER : (typeof AMBER_BTN_STYLE !== 'undefined' ? AMBER_BTN_STYLE : `background: #ef4444; color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-weight: 700; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;`);
+                
+                btnHtml = `<button style="${btnStyle}" onclick="executeMediaAction('${id}', '${safeTitle}', true, this)"><i class="fas fa-satellite-dish"></i> Join Stream</button>`;
             } 
             else {
-                // TIME REACHED (diff <= 0) OR STATUS SAYS LIVE -> OPEN BUTTON
-                tagHtml = '<span class="tag-live" style="background:#ef4444; padding:2px 6px; border-radius:4px; font-size:10px; color:#fff; font-weight:bold; margin-left:5px; animation: pulse 1s infinite;">🔥 LIVE NOW</span>';
-                btnHtml = `<button class="play-btn" style="background:#10b981; color:#fff;" onclick="executeMediaAction('${id}', '${parentId}', '${safeTitle}', true)"><i class="fas fa-satellite-dish"></i> Join Live</button>`;
+                // NOT LIVE - NO BUTTON, JUST SCHEDULED TAG
+                tagHtml = `<span style="background:#f59e0b; padding:3px 8px; border-radius:4px; font-size:10px; color:#000; font-weight:bold; margin-left:8px;">🕒 SCHEDULED</span>`;
+                btnHtml = `<div style="text-align:center; padding:10px; border-radius:8px; background: rgba(255,255,255,0.05); border: 1px dashed var(--border-color, #334155); color: var(--text-muted, #94a3b8); font-size: 12px; font-weight:600;"><i class="fas fa-clock"></i> Waiting to start</div>`;
             }
 
             html += `
-            <div class="folder-item animate-slide-up">
-                <div class="thumb-container">
-                    <img src="${thumb}" class="content-thumb" onerror="this.src='${FALLBACK_IMG}'">
+            <div class="folder-item animate-slide-up" style="display:flex; justify-content:space-between; align-items:center; background:var(--glass-bg, #fff); padding:15px; border-radius:12px; margin-bottom:12px; border: 1px solid var(--glass-border, #e2e8f0); box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                <div class="thumb-container" style="display:flex; align-items:center; flex:1;">
+                    <img src="${thumb}" style="width:130px; border-radius:8px; margin-right:15px; aspect-ratio:16/9; object-fit:cover;" onerror="this.src='${FALLBACK_IMG}'">
                     <div>
-                        <h4 style="color: var(--text-main); margin:0;">${item.title} ${tagHtml}</h4>
-                        <small style="color: #38bdf8; font-weight: bold; font-size: 11px;"><i class="far fa-clock"></i> Scheduled For: ${dateString}</small>
+                        <h5 style="color: var(--text-main, #1e293b); margin:0 0 5px 0; font-size:15px; font-weight:700;">${item.title || trueMedia.title} ${tagHtml}</h5>
+                        <small style="color: var(--primary-neon, #0ea5e9); font-weight:600; font-size: 12px;"><i class="far fa-clock"></i> ${dateString}</small>
                     </div>
                 </div>
-                ${btnHtml}
+                <div style="min-width: 150px; margin-left: 15px;">${btnHtml}</div>
             </div>`;
         });
         
-        liveContainer.innerHTML = html || `<p class="text-muted text-center">No active type-3 streams.</p>`;
+        liveContainer.innerHTML = html || `<div class="text-center py-4" style="background: var(--glass-bg, #f8fafc); border-radius: 12px; border: 1px dashed var(--border-color, #cbd5e1);"><p style="color: var(--text-muted, #64748b); font-weight: 600; margin: 0;">No active streams right now.</p></div>`;
     } catch(e) {
         liveContainer.innerHTML = '<p class="text-danger text-center">Live feed error.</p>';
     }
 }
+
 
 // ==========================================
 // 4. VOD CONTENT FOLDERS
