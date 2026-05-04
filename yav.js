@@ -250,7 +250,7 @@ window.closeCourse = function() {
 }
 
 // ==========================================
-// 3. LIVE FEED (FAST PARALLEL FETCHER)
+// 3. LIVE FEED (DEEP SCANNING WITH ASLI MEDIA FETCHER)
 // ==========================================
 async function fetchLiveFeed(courseId) {
     const liveContainer = document.getElementById('live-list-container');
@@ -258,99 +258,119 @@ async function fetchLiveFeed(courseId) {
     if(!liveSection) return;
 
     liveSection.style.display = 'block';
-    liveContainer.innerHTML = '<div class="text-center py-5"><i class="fas fa-circle-notch fa-spin fa-2x text-danger mb-3"></i><br><span style="color:var(--text-muted, #64748b);">Scanning Live Matrix Fast...</span></div>';
+    liveContainer.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin text-muted"></i> Intercepting Final Live Data...</div>';
 
     try {
-        let allLiveClasses = [];
+        let potentialClasses = [];
         let scannedFolders = new Set(); 
 
         async function scanFolderTree(fId, depth) {
-            if(depth > 4 || scannedFolders.has(fId)) return;
+            if(depth > 5 || scannedFolders.has(fId)) return;
             scannedFolders.add(fId);
 
             try {
-                let p_id = (fId === "0") ? "0" : fId; 
-                const payload = { course_id: String(courseId), folder_id: String(p_id), is_free: "", keyword: "", limit: "1000", page: "1", parent_course_id: "0" };
-
-                let data = await engineFetch(API.CONTENT, 'POST', payload);
-                let items = (data && data.data) ? (Array.isArray(data.data) ? data.data : (Array.isArray(data.data.list) ? data.data.list : [])) : [];
+                const data = await engineFetch(API.CONTENT, 'POST', { course_id: String(courseId), folder_id: String(fId), limit: "5000", page: "1", parent_course_id: "0" });
+                let items = [];
+                if (data && data.data) {
+                    if (Array.isArray(data.data)) items = data.data;
+                    else if (Array.isArray(data.data.list)) items = data.data.list;
+                }
 
                 let subFolders = [];
 
-                for (let item of items) {
+                items.forEach(item => {
                     const type = (item.type || "").toLowerCase();
                     const d = item.data || {};
                     const id = d.id || item.entity_id || item.id;
-                    let vType = parseInt(item.video_type || d.video_type || 0);
+                    let vType = parseInt(d.video_type || 0);
 
-                    if (vType === 3) {
-                        allLiveClasses.push(item);
+                    // Grab potential lives to fetch true details
+                    if (vType === 3 || type === 'live' || d.is_live == 1) {
+                        item.parent_folder_id = fId; 
+                        potentialClasses.push(item);
                     } else if (type === 'folder' || type === 'subject' || type === 'chapter') {
                         subFolders.push(id);
                     }
-                }
-                
-                // 🚨 FAST FETCH: Execute all subfolder requests simultaneously!
-                const promises = subFolders.map(subId => scanFolderTree(subId, depth + 1));
-                await Promise.all(promises);
+                });
 
+                for (let subId of subFolders) await scanFolderTree(subId, depth + 1);
             } catch (e) {}
         }
 
         await scanFolderTree("0", 1);
 
-        allLiveClasses.sort((a, b) => {
-            let tA = parseInt(a.live_from || a.data?.live_from || 0);
-            let tB = parseInt(b.live_from || b.data?.live_from || 0);
-            return tA - tB;
-        });
+        // 🚨 MAGIC: Fetch ASLI Data for potential classes
+        let confirmedLives = [];
+        await Promise.all(potentialClasses.map(async (item) => {
+            const id = item.data?.id || item.entity_id || item.id;
+            const parentId = item.parent_folder_id || "0";
+            
+            const trueData = await fetchTrueMediaDetails(currentCourseId, parentId, id);
+            if (trueData) {
+                item.true_media = trueData;
+                confirmedLives.push(item);
+            }
+        }));
 
-        if (allLiveClasses.length === 0) { 
-            liveContainer.innerHTML = `<div class="text-center py-4" style="background: var(--glass-bg, #f8fafc); border-radius: 12px; border: 1px dashed var(--border-color, #cbd5e1);"><p style="color: var(--text-muted, #64748b); font-weight: 600; margin: 0;">No upcoming live classes right now.</p></div>`;
+        confirmedLives.sort((a, b) => parseInt(a.true_media.live_from || 0) - parseInt(b.true_media.live_from || 0));
+
+        if (confirmedLives.length === 0) { 
+            liveContainer.innerHTML = `<div class="text-center py-4" style="background: var(--bg-color); border-radius: 12px; border: 1px dashed var(--border-color);"><i class="fas fa-satellite-dish fa-2x text-muted mb-2"></i><p style="color: var(--text-muted); font-weight: 600; margin: 0;">No upcoming live classes right now.</p></div>`;
             return; 
         }
 
         let html = '';
+        let now = Date.now();
 
-        allLiveClasses.forEach(item => {
-            const d = item.data || {};
-            const id = d.id || item.entity_id || item.id;
-            const titleText = item.title || d.title || "Live Class";
-            const safeTitle = encodeURIComponent(titleText);
-            const thumb = item.thumbnail || d.thumbnail || FALLBACK_IMG;
+        confirmedLives.forEach(item => {
+            const trueMedia = item.true_media;
+            const id = trueMedia.id;
+            const parentId = item.parent_folder_id || "0"; 
+            const safeTitle = encodeURIComponent(trueMedia.title || item.title || "Live Class");
+            const thumb = trueMedia.thumbnail || item.thumbnail || FALLBACK_IMG;
             
-            let rawTime = item.live_from || d.live_from || item.start_date || item.created_at || 0;
-            let dateString = formatIST(rawTime);
-            let timeStr = getTimeDiffStr(rawTime);
-            let lStatus = parseInt(item.live_status !== undefined ? item.live_status : (d.live_status || -1));
+            let vType = parseInt(trueMedia.video_type || 0);
+            if (vType !== 3) return; // ONLY TYPE 3
+
+            let liveFrom = parseInt(trueMedia.live_from || 0) * 1000;
+            let diff = liveFrom - now;
+            let lStatus = parseInt(trueMedia.live_status);
 
             let tagHtml = ''; let btnHtml = '';
+            let dateString = liveFrom > 0 ? new Date(liveFrom).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }) : "Time not set";
 
-            if (lStatus === 0) {
-                tagHtml = `<span style="background:#f59e0b; padding:3px 8px; border-radius:4px; font-size:10px; color:#000; font-weight:bold; margin-left:8px;">🕒 SCHEDULED</span>`;
-                btnHtml = `<button style="${BTN_OUTLINE} cursor:not-allowed;" disabled><i class="fas fa-lock"></i> Starts in ${timeStr}</button>`;
+            // 🚨 MASTER LOGIC 🚨
+            if (diff > 0) {
+                // TIME HAS NOT COME -> BLOCK BUTTON
+                let h = Math.floor(diff / 3600000);
+                let m = Math.floor((diff % 3600000) / 60000);
+                let tStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
+                
+                tagHtml = `<span class="tag-scheduled" style="background:#f59e0b; padding:2px 6px; border-radius:4px; font-size:10px; color:#000; font-weight:bold; margin-left:5px;">🕒 SCHEDULED</span>`;
+                btnHtml = `<button class="btn-outline" disabled style="color:#aaa; border-color:#333; cursor:not-allowed; opacity: 0.6; background:transparent;"><i class="fas fa-lock"></i> Starts in ${tStr}</button>`;
             } 
             else {
-                tagHtml = '<span style="background:#ef4444; padding:3px 8px; border-radius:4px; font-size:10px; color:#fff; font-weight:bold; margin-left:8px; animation: pulse 1s infinite;">🔥 LIVE NOW</span>';
-                btnHtml = `<button style="${BTN_DANGER}" onclick="executeMediaAction('${id}', '${safeTitle}', true, this)"><i class="fas fa-satellite-dish"></i> Join Live</button>`;
+                // TIME REACHED (diff <= 0) OR STATUS SAYS LIVE -> OPEN BUTTON
+                tagHtml = '<span class="tag-live" style="background:#ef4444; padding:2px 6px; border-radius:4px; font-size:10px; color:#fff; font-weight:bold; margin-left:5px; animation: pulse 1s infinite;">🔥 LIVE NOW</span>';
+                btnHtml = `<button class="play-btn" style="background:#10b981; color:#fff;" onclick="executeMediaAction('${id}', '${parentId}', '${safeTitle}', true)"><i class="fas fa-satellite-dish"></i> Join Live</button>`;
             }
 
             html += `
-            <div class="folder-item animate-slide-up" style="display:flex; justify-content:space-between; align-items:center; background:var(--glass-bg, #fff); padding:15px; border-radius:12px; margin-bottom:12px; border: 1px solid var(--glass-border, #e2e8f0); box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-                <div class="thumb-container" style="display:flex; align-items:center; flex:1;">
-                    <img src="${thumb}" style="width:130px; border-radius:8px; margin-right:15px; aspect-ratio:16/9; object-fit:cover;" onerror="this.src='${FALLBACK_IMG}'">
+            <div class="folder-item animate-slide-up">
+                <div class="thumb-container">
+                    <img src="${thumb}" class="content-thumb" onerror="this.src='${FALLBACK_IMG}'">
                     <div>
-                        <h5 style="color: var(--text-main, #1e293b); margin:0 0 5px 0; font-size:15px; font-weight:700;">${titleText} ${tagHtml}</h5>
-                        <small style="color: var(--primary-neon, #0ea5e9); font-weight:600; font-size: 12px;"><i class="far fa-clock"></i> ${dateString}</small>
+                        <h4 style="color: var(--text-main); margin:0;">${item.title} ${tagHtml}</h4>
+                        <small style="color: #38bdf8; font-weight: bold; font-size: 11px;"><i class="far fa-clock"></i> Scheduled For: ${dateString}</small>
                     </div>
                 </div>
-                <div style="min-width: 150px; margin-left: 15px;">${btnHtml}</div>
+                ${btnHtml}
             </div>`;
         });
         
-        liveContainer.innerHTML = html;
+        liveContainer.innerHTML = html || `<p class="text-muted text-center">No active type-3 streams.</p>`;
     } catch(e) {
-        liveContainer.innerHTML = '<p class="text-danger text-center">Failed to fetch live feed.</p>';
+        liveContainer.innerHTML = '<p class="text-danger text-center">Live feed error.</p>';
     }
 }
 
