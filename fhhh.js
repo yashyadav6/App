@@ -46,28 +46,37 @@ const SCAN_CHUNK_SIZE = 15;
 let isScanning = false;
 
 // ==========================================
-// 🕒 ADVANCED TIME ENGINE (FIXED)
+// 🕒 ADVANCED TIME ENGINE (IST LOCKED)
 // ==========================================
-// Accepts API UNIX time (in seconds) and converts accurately
 function formatIST(unixSeconds) {
     let sec = parseInt(unixSeconds);
     if (!sec || isNaN(sec) || sec <= 0) return "Time not set";
-    const date = new Date(sec * 1000);
-    return date.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
+    
+    // Unix timestamp is in seconds, JS needs milliseconds
+    const date = new Date(sec * 1000); 
+    
+    // Convert strictly to Indian Standard Time (IST)
+    return date.toLocaleString('en-IN', { 
+        timeZone: 'Asia/Kolkata', 
+        dateStyle: 'medium', 
+        timeStyle: 'short' 
+    });
 }
 
 function getTimeDiffStr(unixSeconds) {
     let sec = parseInt(unixSeconds);
     if (!sec || isNaN(sec) || sec <= 0) return "Soon";
-    const now = Date.now();
-    const target = sec * 1000;
+    
+    const now = Date.now(); // Current time in milliseconds
+    const target = sec * 1000; // Target live_from time in milliseconds
     const diff = target - now;
     
-    // If time has passed but is_live is still 0
     if (diff <= 0) return "Waiting to start"; 
     
-    const h = Math.floor(diff / 3600000);
-    const m = Math.floor((diff % 3600000) / 60000);
+    // Calculate hours and minutes left
+    const h = Math.floor(diff / (1000 * 60 * 60));
+    const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
@@ -324,11 +333,13 @@ async function fetchLiveFeed(courseId) {
             const safeTitle = encodeURIComponent(titleText);
             const thumb = item.thumbnail || d.thumbnail || FALLBACK_IMG;
             
-            // Extract Time Data
-            let rawTime = item.live_from || d.live_from || item.start_date || item.created_at || 0;
-            let dateString = formatIST(rawTime);
-            let timeStr = getTimeDiffStr(rawTime);
+                        // Extract Time Data (Priority: true_media's live_from API)
+            let rawSeconds = parseInt(trueMedia.live_from || item.live_from || item.data?.live_from || 0);
             
+            // Format to IST and get Time Left
+            let dateString = formatIST(rawSeconds);
+            let timeStr = getTimeDiffStr(rawSeconds);
+ 
             // 🚨 STRICT LIVE LOGIC 🚨
             let isCurrentlyLive = (parseInt(item.is_live) === 1 || parseInt(d.is_live) === 1 || parseInt(item.live_status) === 1 || parseInt(item.live_status) === 2);
 
