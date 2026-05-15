@@ -16,7 +16,7 @@ const API = {
 const NT_HEADERS = {
     'accept': 'application/json, text/plain, */*',
     'app_id': '1770981347',
-    'authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyNzg1NDU2LCJhcHBfaWQiOiIxNzcwOTgxMzQ3IiwiZGV2aWNlX2lkIjoiODgzODI0Y2EtNWJkZC00YjA5LWE1NWMtMDZjNzQ2ZmRhOTJkIiwicGxhdGZvcm0iOiIzIiwidXNlcl90eXBlIjoxLCJpYXQiOjE3Nzg2NjkwMDMsImV4cCI6MTc4MTI2MTAwM30.nbSyAtea0MajhUEZm1ok03u1rp1A5L7l8bgqDSz2dro',
+    'authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyNzg1NDU2LCJhcHBfaWQiOiIxNzcwOTgxMzQ3IiwiZGV2aWNlX2lkIjoiODgzODI0Y2EtNWJkZC00YjA5LWE1NWMtMDZjNzQ2ZmRhOTJkIiwicGxhdGZvcm0iOiIzIiwidXNlcl90eXBlIjoxLCJpYXQiOjE3Nzg4NjE1NDMsImV4cCI6MTc4MTQ1MzU0M30.B7x-uj-O9hIFt0_DPtEnfcbNtiBtH1L3rP7IfbuR60g',
     'content-type': 'application/json',
     'origin': 'https://nexttoppers.com',
     'platform': '3',
