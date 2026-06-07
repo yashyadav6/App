@@ -503,7 +503,7 @@ window.executeMediaAction = async function(contentId, title, forceLiveRoute, btn
             let chatNode = mediaData.mqtt_live_cred ? (mediaData.mqtt_live_cred.public_chat_node || "") : "";
             const safeTitle = encodeURIComponent(decodeURIComponent(title));
             const safeStream = encodeURIComponent(mediaUrl);
-            window.open(`live.php?title=${safeTitle}&node=${chatNode}&stream=${safeStream}&videoId=${contentId}`, '_blank');
+            window.open(`live.html?title=${safeTitle}&node=${chatNode}&stream=${safeStream}&videoId=${contentId}`, '_blank');
             return;
         }
 
@@ -515,7 +515,7 @@ window.executeMediaAction = async function(contentId, title, forceLiveRoute, btn
                 let ytId = mediaUrl.includes('v=') ? mediaUrl.split('v=')[1].substring(0, 11) : mediaUrl.split('youtu.be/')[1].substring(0, 11);
                 window.open(`https://www.youtube.com/watch?v=${ytId}`, '_blank');
             } else {
-                window.open(`player.php?url=${encodeURIComponent(mediaUrl)}&title=${encodeURIComponent(decodeURIComponent(title))}`, '_blank');
+                window.open(`player.html?url=${encodeURIComponent(mediaUrl)}&title=${encodeURIComponent(decodeURIComponent(title))}`, '_blank');
             }
         } else { alert("Failed to extract media token. Stream encrypted."); }
     } catch(e) {
